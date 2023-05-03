@@ -1,24 +1,23 @@
-import platform
-from tkinter import Tk, Button, messagebox
-from bs4 import BeautifulSoup
-import pymongo
-import requests
-import openpyxl
+import os, pathlib, threading, platform
 
-import threading, pathlib, os, datetime
+from tkinter import Button, messagebox
+import openpyxl
+from bs4 import BeautifulSoup
+import requests
+import matplotlib.pyplot as plt
+
+import pymongo
+import datetime
 
 class App:
-  def __init__(self, main) -> None:
-    self.main = main
+  def __init__(self) -> None:
     t = datetime.datetime.now()
     self.today = '{:04d}{:02d}{:02d}'.format(t.year, t.month, t.day)
     self.now = '{:02d}{:02d}'.format(t.hour, t.minute)
+    self.numberFilePath = os.path.join(pathlib.Path.home(), 'Downloads', 'LTnumbers.xlsx')
+    self.uri = ''
 
-    self.uri = "mongodb+srv://gol_admin:NviepXBt5BiiAJT8@cluster0.duyky.mongodb.net/?retryWrites=true&w=majority"
-
-    self.numberFilePath = os.path.join(pathlib.Path.home(), 'Downloads', 'number_{}.xlsx'.format(self.today))
-    Button(self.main, text='Create Factor', command=lambda : threading.Thread(target=self.createFactor, name="Stock2DB").start()).pack(pady=10)
-    self.createFactor()
+    self.createFile()
 
   def algorithm(self, wb: openpyxl.Workbook):
     ws_num = wb.worksheets[0]
@@ -78,22 +77,32 @@ class App:
     # else:
     #   os.system("open {}".format(self.numberFilePath))
 
+  def createFile(self):
+    t = datetime.datetime.now()
+    today = '{:04d}{:02d}{:02d}'.format(t.year, t.month, t.day)
+    now = '{:02d}{:02d}'.format(t.hour, t.minute)
 
-  def createFactor(self):
+    dvg = 'normal'
+
     if os.path.isfile(self.numberFilePath):
       wb_num = openpyxl.load_workbook(self.numberFilePath)
-      if len(wb_num.sheetnames) == 1:
-        wb_num.create_sheet('factor')
-      ws_factor = wb_num.worksheets[1]
-      wb_num.active = ws_factor
-      
-      self.algorithm(wb_num)
-      
+      ws = wb_num.worksheets[0]
+      createDate = ws.cell(row=1, column=1).value
+      thatDay = datetime.date.fromisoformat('{}-{}-{}'.format(createDate[0:4], createDate[4:6], createDate[6:8]))
+      saturday = thatDay - datetime.timedelta(days=thatDay.weekday()+2)
+    
+      if ((t.date() - saturday).days == 0 and int(now) > 2100) or (t.date() - saturday).days > 7:
+          dvg = 'newNumber'
+
     else:
+      dvg = 'newFile'
+
+
+    if dvg != 'normal':
       client = pymongo.MongoClient(self.uri)
       try:
           client.admin.command('ping')
-          print("connected to MongoDB!")
+          print("Load MongoDB for new file!")
       except Exception as e:
           print(e)
           return
@@ -103,7 +112,10 @@ class App:
       colFac = db['factors']
       
       # Insert New Number
-      r = requests.get('https://dhlottery.co.kr/common.do?method=main')
+      try:
+          r = requests.get('https://dhlottery.co.kr/common.do?method=main')
+      except:
+         print('Fail, Try again')
       soup = BeautifulSoup(r.text, 'html.parser')
 
       tempObj = {
@@ -123,10 +135,12 @@ class App:
       elif tempObj['_id'] > recentNo + 1:
           messagebox.showwarning(title='Too Many Skip', message='{} numbers are missing!'.format(tempObj['_id']-recentNo))
           return
-    
-      wb_create = openpyxl.Workbook()
-      ws_create = wb_create.worksheets[0]
-      ws_create.cell(row=1, column=1).value = '_id'
+
+      match dvg:
+          case 'newFile':
+              wb_num = openpyxl.Workbook()
+      ws_create = wb_num.worksheets[0]
+      ws_create.cell(row=1, column=1).value = today + now
       ws_create.cell(row=1, column=2).value = '1st'
       ws_create.cell(row=1, column=3).value = '2nd'
       ws_create.cell(row=1, column=4).value = '3rd'
@@ -145,13 +159,17 @@ class App:
         ws_create.cell(row=idx, column=7).value = i['6th']
         ws_create.cell(row=idx, column=8).value = i['Bns']
         idx+=1
-      wb_create.save(self.numberFilePath)
+      wb_num.save(self.numberFilePath)
 
       client.close()
-      messagebox.showinfo(title='Create File', message='Create New File in Downloads.\nClick again button.')
 
-root = Tk()
-root.geometry('150x200+0+400')
-root.attributes('-topmost',True)
-window = App(root)
-# root.mainloop()
+    if len(wb_num.sheetnames) == 1:
+      wb_num.create_sheet('factor')
+
+    ws_factor = wb_num.worksheets[1]
+    wb_num.active = ws_factor
+    wb_num.save(self.numberFilePath)
+    
+    self.algorithm(wb_num)
+
+App()
