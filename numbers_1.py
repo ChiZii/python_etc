@@ -91,7 +91,7 @@ class App:
       thatDay = datetime.date.fromisoformat('{}-{}-{}'.format(createDate[0:4], createDate[4:6], createDate[6:8]))
       saturday = thatDay - datetime.timedelta(days=thatDay.weekday()+2)
     
-      if ((t.date() - saturday).days == 0 and int(now) > 2100) or (t.date() - saturday).days > 7:
+      if ((t.date() - saturday).days == 0 and int(now) > 2100 and int(createDate[8:12]) < 2100) or (t.date() - saturday).days > 7:
           dvg = 'newNumber'
 
     else:
